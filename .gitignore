@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment variables (contains API keys)
+.env
+
+# ChromaDB data (runtime generated, not source code)
+data/chroma_db/
+
+# Uploaded files (runtime generated)
+data/uploads/
+
+# Test results (runtime generated)
+test_result.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
