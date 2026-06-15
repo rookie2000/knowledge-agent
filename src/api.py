@@ -2,11 +2,13 @@
 FastAPI routes for Knowledge Agent API.
 """
 
+import json
 from pathlib import Path
 from dataclasses import dataclass
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .config import config
@@ -170,6 +172,34 @@ async def chat(request: ChatRequest):
         return ChatResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """
+    Chat with streaming response (SSE).
+
+    Event types:
+    - text: partial answer text
+    - tool_start: agent is calling a tool
+    - done: final metadata (sources, tool_calls, conversation_id)
+    - error: something went wrong
+    """
+    if not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    def event_generator():
+        for event in agent.chat_stream(
+            question=request.question,
+            conversation_id=request.conversation_id
+        ):
+            yield f"event: {event['event']}\ndata: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
 
 
 @app.get("/api/chat/{conversation_id}/history")

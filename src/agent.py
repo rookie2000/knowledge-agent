@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 from dataclasses import dataclass, field
 
+import json as _json
 import anthropic
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -227,6 +228,112 @@ class KnowledgeAgent:
         except Exception as e:
             trace.error = str(e)
             raise
+
+    def chat_stream(self, question: str, conversation_id: str | None = None):
+        """
+        Stream chat response using SSE.
+
+        Yields dicts with keys:
+            event: "text" | "tool_start" | "done" | "error"
+            data: string (for text) or dict (for tool_start/done)
+        """
+        if not question.strip():
+            yield {"event": "error", "data": "Question cannot be empty"}
+            return
+
+        if not conversation_id:
+            conversation_id = str(uuid.uuid4())
+
+        if conversation_id not in self._conversations:
+            self._conversations[conversation_id] = []
+
+        messages = self._build_messages(conversation_id, question)
+        sources = []
+        tool_calls_record = []
+        final_answer = ""
+
+        try:
+            for _ in range(config.MAX_TOOL_CALLS + 1):
+                collected_text = []
+                tool_use_blocks = []
+
+                with self.client.messages.stream(
+                    model=config.CLAUDE_MODEL,
+                    max_tokens=config.MAX_TOKENS,
+                    system=SYSTEM_PROMPT,
+                    tools=TOOLS,
+                    messages=messages
+                ) as stream:
+                    # Stream text chunks in real-time
+                    for chunk in stream.text_stream:
+                        collected_text.append(chunk)
+                        yield {"event": "text", "data": chunk}
+
+                    # Collect full message for tool call processing
+                    response = stream.get_message()
+
+                for block in response.content:
+                    if block.type == "tool_use":
+                        tool_use_blocks.append(block)
+
+                # No tool calls -> final answer
+                if not tool_use_blocks:
+                    final_answer = "".join(collected_text)
+                    break
+
+                # Execute tools
+                messages.append({"role": "assistant", "content": response.content})
+                tool_results = []
+
+                for tool_use in tool_use_blocks:
+                    result = self.tool_executor.execute(tool_use.name, tool_use.input)
+
+                    tool_calls_record.append({
+                        "tool": tool_use.name,
+                        "input": tool_use.input,
+                        "output": result.data if result.success else result.error
+                    })
+
+                    if tool_use.name == "search_knowledge" and result.success:
+                        for item in result.data.get("results", []):
+                            sources.append({
+                                "doc_id": item["doc_id"],
+                                "filename": item["filename"],
+                                "chunk_text": item["content"][:200] + "..." if len(item["content"]) > 200 else item["content"],
+                                "relevance_score": item["relevance_score"]
+                            })
+
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": str(result.data) if result.success else f"Error: {result.error}"
+                    })
+
+                yield {"event": "tool_start", "data": {
+                    "tools": [t["tool"] for t in tool_calls_record[-len(tool_use_blocks):]]
+                }}
+                messages.append({"role": "user", "content": tool_results})
+
+            # Save conversation
+            self._conversations[conversation_id].append(
+                Message(message_id=str(uuid.uuid4()), conversation_id=conversation_id,
+                        role="user", content=question)
+            )
+            self._conversations[conversation_id].append(
+                Message(message_id=str(uuid.uuid4()), conversation_id=conversation_id,
+                        role="assistant", content=final_answer,
+                        sources=sources, tool_calls=tool_calls_record)
+            )
+            self._trim_conversation(conversation_id)
+
+            yield {"event": "done", "data": {
+                "sources": sources,
+                "tool_calls": tool_calls_record,
+                "conversation_id": conversation_id
+            }}
+
+        except Exception as e:
+            yield {"event": "error", "data": str(e)}
 
     def get_history(self, conversation_id: str) -> list[dict]:
         """

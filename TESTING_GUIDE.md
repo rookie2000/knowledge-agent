@@ -2,6 +2,8 @@
 
 按顺序执行每个步骤，每步都标注了"观察什么"和"面试怎么说"，帮你吃透项目细节。
 
+> **Windows 用户**：直接运行 `.\test_demo.ps1` 可自动执行全部测试步骤。下面的 curl 命令适用于 Linux/Mac，Windows 下请参考脚本中的 PowerShell 写法。
+
 ---
 
 ## 0. 环境准备
@@ -11,7 +13,9 @@
 pip install -r requirements.txt
 
 # 确认 .env 已配置（需要真实的 API Key）
-cat .env
+cat .env  # Linux/Mac
+# 或
+Get-Content .env  # PowerShell
 
 # 跑一遍测试，确认代码没问题
 make test
@@ -83,6 +87,15 @@ curl http://localhost:8000/api/documents
 
 ## 5. 基础问答（核心功能）
 
+本项目支持两种聊天模式：
+
+**流式输出（推荐，体验好）：**
+```bash
+curl -N -X POST http://localhost:8000/api/chat/stream -H "Content-Type: application/json" -d "{\"question\": \"什么是RAG?\"}"
+```
+SSE 事件类型：`text`（实时文本块）、`tool_start`（正在调用工具）、`done`（最终元数据）、`error`。
+
+**非流式（返回完整 JSON）：**
 ```bash
 curl -X POST http://localhost:8000/api/chat -H "Content-Type: application/json" -d "{\"question\": \"什么是RAG?\"}"
 ```
@@ -98,6 +111,7 @@ curl -X POST http://localhost:8000/api/chat -H "Content-Type: application/json" 
 **面试点：**
 - "Agent Loop 的核心：收到问题 → 模型判断是否需要工具 → 调用 search_knowledge → 把检索结果作为上下文 → 生成最终回答。整个过程模型自主决策，不是硬编码的。"
 - "relevance_score 是 cosine 相似度，1 - distance，用来排序检索结果。"
+- "流式输出用 SSE (Server-Sent Events)，通过 Anthropic SDK 的 `messages.stream()` 实现，用户能实时看到生成过程，不用等全部生成完。"
 
 ---
 
