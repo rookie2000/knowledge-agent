@@ -45,3 +45,6 @@ logs/
 htmlcov/
 .coverage
 coverage.xml
+
+# agent
+.claude/
