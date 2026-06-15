@@ -18,14 +18,14 @@
 
 ### P0 - 必须有
 
-- [ ] **Dockerfile** — 面试官可能问"怎么部署"，一个 `docker build && docker run` 能跑通
-- [ ] **Makefile** — 整合 `make test`、`make run`、`make lint`，显得工程化
-- [ ] **API 集成测试** — 用 httpx + TestClient 测试 FastAPI 路由，目前只测了模块级别
-- [ ] **pyproject.toml** — 现代 Python 项目标配，替代纯 requirements.txt
+- [x] **Dockerfile** — 面试官可能问"怎么部署"，一个 `docker build && docker run` 能跑通
+- [x] **Makefile** — 整合 `make test`、`make run`、`make lint`，显得工程化
+- [x] **API 集成测试** — 用 httpx + TestClient 测试 FastAPI 路由，目前只测了模块级别
+- [x] **pyproject.toml** — 现代 Python 项目标配，替代纯 requirements.txt
 
 ### P1 - 加分项
 
-- [ ] **API 调用重试 / 限流** — agent.py 里 Anthropic 调用无 retry，面试时被问"API 失败怎么办"会尴尬
+- [x] **API 调用重试 / 限流** — agent.py 里 Anthropic 调用无 retry，面试时被问"API 失败怎么办"会尴尬
   - 方案：`tenacity` 库 + 指数退避，改动 < 20 行
 - [ ] **流式响应 (Streaming)** — Agent 场景下流式输出体验好，Claude API 支持 `stream=True`
   - 涉及：agent.py 返回 generator，api.py 用 SSE

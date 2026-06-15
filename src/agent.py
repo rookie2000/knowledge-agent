@@ -8,6 +8,7 @@ from datetime import datetime
 from dataclasses import dataclass, field
 
 import anthropic
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from .config import config
 from .rag import RAGManager
@@ -121,14 +122,8 @@ class KnowledgeAgent:
 
         try:
             for step in range(config.MAX_TOOL_CALLS + 1):
-                # Call Claude API
-                response = self.client.messages.create(
-                    model=config.CLAUDE_MODEL,
-                    max_tokens=config.MAX_TOKENS,
-                    system=SYSTEM_PROMPT,
-                    tools=TOOLS,
-                    messages=messages
-                )
+                # Call Claude API (with retry on transient errors)
+                response = self._call_api(messages)
 
                 trace.model_calls += 1
                 trace.total_tokens += response.usage.input_tokens + response.usage.output_tokens
@@ -293,3 +288,19 @@ class KnowledgeAgent:
 
         if len(history) > max_messages:
             self._conversations[conversation_id] = history[-max_messages:]
+
+    @retry(
+        retry=retry_if_exception_type((anthropic.APIError, anthropic.APITimeoutError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True
+    )
+    def _call_api(self, messages: list[dict]):
+        """Call Claude API with retry on transient errors."""
+        return self.client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=config.MAX_TOKENS,
+            system=SYSTEM_PROMPT,
+            tools=TOOLS,
+            messages=messages
+        )
